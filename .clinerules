@@ -4,6 +4,7 @@ Cline has access to Git and GitHub tools to help automate and enforce these coll
 
 ## Commit Workflow
 
+- **Before committing any changes, test them with the user to ensure they are working and do not introduce new errors. Only commit after user confirmation.**
 - Commit each major step as you go, before proceeding to the next step.
 - After each commit, always push to the remote branch to keep the remote in sync.
 

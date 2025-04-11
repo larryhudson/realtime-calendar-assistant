@@ -38,3 +38,34 @@ Cline has access to Git and GitHub tools to help automate and enforce these coll
 - Always follow the commit and push workflow after each major step, without needing user prompting.
 - If you encounter a blocker or cannot proceed (e.g., due to unsolved errors or limitations), automatically summarize the issue and post it as a comment on the relevant GitHub issue or pull request.
 - Ensure all actions are traceable and documented in the project’s GitHub issues and PRs.
+
+---
+
+# Project Architecture Notes
+
+- **Monorepo Structure:**  
+  The project is organized as a monorepo with separate `frontend` and `backend` directories at the root.
+
+- **Frontend:**  
+  - Located in the `frontend/` directory.
+  - Built with React and TypeScript.
+  - Uses Vite for development and bundling (`vite.config.ts`).
+  - Linting is enforced with ESLint (`eslint.config.js`) and Oxlint (`.oxlintrc.json`).
+  - Testing is set up with Vitest (`vitest.config.ts`).
+  - Entry point: `frontend/src/main.tsx`, main app: `frontend/src/App.tsx`.
+  - Public assets are in `frontend/public/`.
+
+- **Backend:**  
+  - Located in the `backend/` directory.
+  - Node.js application written in TypeScript.
+  - Entry point: `backend/index.ts`.
+  - Configured with its own `package.json` and `tsconfig.json`.
+
+- **Documentation:**  
+  - Documentation for important libraries is in the `docs/` directory, with subfolders for specific topics (e.g., `openai-realtime-api/`, `oxlint/`).
+
+- **General:**  
+  - Each package (`frontend`, `backend`) manages its own dependencies and configuration.
+  - The root `README.md` provides an overview of the project.
+
+These notes are intended to help contributors quickly understand the high-level structure and conventions of the project.

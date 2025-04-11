@@ -8,6 +8,8 @@ import {
   TextField,
   View,
   defaultTheme,
+  TextArea,
+  DatePicker,
 } from "@adobe/react-spectrum";
 
 const INITIAL_COUNT = 0;
@@ -28,6 +30,26 @@ const fetchOpenAISession = async (): Promise<OpenAISessionResponse> => {
   return await res.json();
 };
 
+import { parseDate, DateValue } from "@internationalized/date";
+
+type EventForm = {
+  title: string;
+  description: string;
+  startDate: string; // yyyy-mm-dd
+  startTime: string; // HH:mm
+  endDate: string;   // yyyy-mm-dd
+  endTime: string;   // HH:mm
+};
+
+const INITIAL_EVENT_FORM: EventForm = {
+  title: "",
+  description: "",
+  startDate: "",
+  startTime: "",
+  endDate: "",
+  endTime: "",
+};
+
 const App: React.FC = () => {
   const [count, setCount] = useState<number>(INITIAL_COUNT);
   const [name, setName] = useState<string>("");
@@ -37,6 +59,10 @@ const App: React.FC = () => {
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // State for event form and dialog
+  const [eventForm, setEventForm] = useState<EventForm>(INITIAL_EVENT_FORM);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
 
   // Establish WebRTC connection to OpenAI Realtime API
   const handleStartConversation = async (): Promise<void> => {
@@ -76,10 +102,72 @@ const App: React.FC = () => {
       setLocalStream(ms);
       pc.addTrack(ms.getTracks()[0]);
 
-      // 4. Set up data channel for events (optional, for debugging)
+      // 4. Set up data channel for events (function calling, etc.)
       const dc = pc.createDataChannel("oai-events");
+
+      // Function schema for calendar event creation
+      const calendarEventFunction = {
+        type: "function",
+        name: "create_calendar_event",
+        description: "Create a calendar event with structured data.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Event title" },
+            description: { type: "string", description: "Event description" },
+            start_time: { type: "string", description: "Event start time (ISO 8601)" },
+            end_time: { type: "string", description: "Event end time (ISO 8601)" }
+          },
+          required: ["title", "start_time", "end_time"]
+        }
+      };
+
+      // Prefill event form when function_call is received
       dc.addEventListener("message", (e) => {
-        console.log(e);
+        try {
+          const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+          // Listen for response.done with function_call output
+          if (
+            data?.type === "response.done" &&
+            Array.isArray(data.response?.output)
+          ) {
+            for (const item of data.response.output) {
+              if (
+                item.type === "function_call" &&
+                item.name === "create_calendar_event" &&
+                typeof item.arguments === "string"
+              ) {
+                const args = JSON.parse(item.arguments);
+                console.log({args})
+                // Prefill event form state (if available in args)
+                setEventForm((prev) => ({
+                  ...prev,
+                  title: args.title || "",
+                  description: args.description || "",
+                  startDate: args.start_time ? args.start_time.slice(0, 10) : "",
+                  startTime: args.start_time ? args.start_time.slice(11, 16) : "",
+                  endDate: args.end_time ? args.end_time.slice(0, 10) : "",
+                  endTime: args.end_time ? args.end_time.slice(11, 16) : "",
+                }));
+                setEventDialogOpen(true);
+              }
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      });
+
+      // After connection, send session.update to register the function
+      dc.addEventListener("open", () => {
+        const sessionUpdate = {
+          type: "session.update",
+          session: {
+            tools: [calendarEventFunction],
+            tool_choice: "auto"
+          }
+        };
+        dc.send(JSON.stringify(sessionUpdate));
       });
 
       // 5. Start the session using SDP
@@ -145,6 +233,15 @@ const App: React.FC = () => {
     );
   }
 
+  // Handlers for event form dialog
+  const handleEventFormChange = (field: keyof EventForm, value: string) => {
+    setEventForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCloseEventDialog = () => {
+    setEventDialogOpen(false);
+  };
+
   return (
     <Provider theme={defaultTheme} colorScheme="light">
       <View padding="size-200">
@@ -159,7 +256,7 @@ const App: React.FC = () => {
             label="Your Name"
             value={name}
             onChange={setName}
-            placeholder="Enter your name"
+            contextualHelp="Enter your name"
           />
           <Button variant="cta" onPress={() => setCount(count + 1)}>
             Count is {count}
@@ -183,6 +280,60 @@ const App: React.FC = () => {
           {error !== undefined && (
             <View>
               <p style={{ color: "red" }}>{error}</p>
+            </View>
+          )}
+
+          {/* Inline Calendar Event Form (shown when eventDialogOpen is true) */}
+          {eventDialogOpen && (
+            <View
+              borderWidth="thin"
+              borderColor="dark"
+              padding="size-200"
+              marginTop="size-200"
+              backgroundColor="gray-50"
+              maxWidth="size-3600"
+              width="100%"
+            >
+              <Heading level={2}>Prefilled Calendar Event</Heading>
+              <Flex direction="column" gap="size-200">
+                <TextField
+                  label="Title"
+                  value={eventForm.title}
+                  onChange={(v) => handleEventFormChange("title", v)}
+                />
+                <TextArea
+                  label="Description"
+                  value={eventForm.description}
+                  onChange={(v) => handleEventFormChange("description", v)}
+                />
+                <DatePicker
+                  label="Start Date"
+                  value={eventForm.startDate ? parseDate(eventForm.startDate) : null}
+                  onChange={(value) =>
+                    handleEventFormChange("startDate", value ? value.toString() : "")
+                  }
+                />
+                <TextField
+                  label="Start Time (HH:mm)"
+                  value={eventForm.startTime}
+                  onChange={(v) => handleEventFormChange("startTime", v)}
+                />
+                <DatePicker
+                  label="End Date"
+                  value={eventForm.endDate ? parseDate(eventForm.endDate) : null}
+                  onChange={(value) =>
+                    handleEventFormChange("endDate", value ? value.toString() : "")
+                  }
+                />
+                <TextField
+                  label="End Time (HH:mm)"
+                  value={eventForm.endTime}
+                  onChange={(v) => handleEventFormChange("endTime", v)}
+                />
+                <Button variant="primary" onPress={handleCloseEventDialog}>
+                  Close
+                </Button>
+              </Flex>
             </View>
           )}
         </Flex>

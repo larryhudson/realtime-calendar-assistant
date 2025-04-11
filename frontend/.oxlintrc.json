@@ -6,7 +6,6 @@
   "categories": {
     "correctness": "error",
     "nursery": "error",
-    "pedantic": "error",
     "perf": "error",
     "restriction": "error",
     "style": "error",

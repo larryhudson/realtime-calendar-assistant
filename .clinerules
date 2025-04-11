@@ -1,0 +1,27 @@
+# Cline Project Collaboration Rules
+
+Cline has access to Git and GitHub tools to help automate and enforce these collaboration rules.
+
+## Issue-Driven Development Workflow
+
+1. **All Major Tasks Require Issues**
+   - Every significant feature, bug fix, or change must have a corresponding GitHub issue.
+   - Issues should be descriptive, outlining the problem, goal, or feature clearly.
+
+2. **Work via Pull Requests**
+   - All code changes must be made in branches and submitted as pull requests (PRs).
+   - Each PR must reference the relevant issue(s) it addresses (e.g., "Closes #issue-number").
+   - PR titles and descriptions should clearly state the purpose and link to the issue.
+
+3. **Blockers, Challenges, and Status Updates**
+   - Any blockers, questions, or status updates must be posted as comments on the relevant issue.
+   - Use comments to discuss implementation details, request clarification, or provide progress updates.
+
+4. **Review and Merge Process**
+   - PRs should be reviewed before merging.
+   - Only merge PRs after ensuring they address the issue and pass all checks.
+
+5. **General Guidelines**
+   - Keep communication clear and concise.
+   - Reference issues and PRs in all discussions for traceability.
+   - Update or close issues as work progresses and is completed.

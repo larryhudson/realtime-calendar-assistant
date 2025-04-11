@@ -242,6 +242,48 @@ const App: React.FC = () => {
     setEventDialogOpen(false);
   };
 
+  // Save event to backend
+  const handleSaveEvent = async () => {
+    // Basic validation
+    if (
+      !eventForm.title ||
+      !eventForm.startDate ||
+      !eventForm.startTime ||
+      !eventForm.endDate ||
+      !eventForm.endTime
+    ) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    // Combine date and time into ISO 8601 strings
+    const start_time = `${eventForm.startDate}T${eventForm.startTime}:00`;
+    const end_time = `${eventForm.endDate}T${eventForm.endTime}:00`;
+
+    try {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: eventForm.title,
+          description: eventForm.description,
+          start_time,
+          end_time,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to create event: " + res.statusText);
+      }
+      // Optionally, you could use the returned event here
+      setEventDialogOpen(false);
+      setEventForm(INITIAL_EVENT_FORM);
+      setError(undefined);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unknown error creating event"
+      );
+    }
+  };
+
   return (
     <Provider theme={defaultTheme} colorScheme="light">
       <View padding="size-200">
@@ -330,9 +372,14 @@ const App: React.FC = () => {
                   value={eventForm.endTime}
                   onChange={(v) => handleEventFormChange("endTime", v)}
                 />
-                <Button variant="primary" onPress={handleCloseEventDialog}>
-                  Close
-                </Button>
+                <Flex direction="row" gap="size-200">
+                  <Button variant="primary" onPress={handleSaveEvent}>
+                    Save Event
+                  </Button>
+                  <Button variant="secondary" onPress={handleCloseEventDialog}>
+                    Close
+                  </Button>
+                </Flex>
               </Flex>
             </View>
           )}

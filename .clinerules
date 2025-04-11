@@ -2,6 +2,10 @@
 
 Cline has access to Git and GitHub tools to help automate and enforce these collaboration rules.
 
+## Commit Workflow
+
+- Commit each major step as you go, before proceeding to the next step.
+
 ## Issue-Driven Development Workflow
 
 1. **All Major Tasks Require Issues**

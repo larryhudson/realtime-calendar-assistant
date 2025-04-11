@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import Database from "better-sqlite3";
 import path from "path";
 import axios from "axios";
+import { z } from "zod";
 
 // Event type definition
 interface Event {
@@ -28,6 +29,35 @@ db.exec(`
   );
 `);
 
+/**
+ * Zod schemas for input validation
+ */
+const eventSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  start_time: z.string().refine(
+    (val) => !isNaN(Date.parse(val)),
+    { message: "start_time must be a valid ISO 8601 date string" }
+  ),
+  end_time: z.string().refine(
+    (val) => !isNaN(Date.parse(val)),
+    { message: "end_time must be a valid ISO 8601 date string" }
+  ),
+});
+
+const eventUpdateSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  start_time: z.string().refine(
+    (val) => !isNaN(Date.parse(val)),
+    { message: "start_time must be a valid ISO 8601 date string" }
+  ),
+  end_time: z.string().refine(
+    (val) => !isNaN(Date.parse(val)),
+    { message: "end_time must be a valid ISO 8601 date string" }
+  ),
+});
+
 // Hono app setup
 const app = new Hono();
 
@@ -42,11 +72,20 @@ app.get("/api/events", (c) => {
 
 // Create a new event
 app.post("/api/events", async (c) => {
-  const body = await c.req.json();
-  const { title, description, start_time, end_time } = body as Partial<Event>;
-  if (!title || !start_time || !end_time) {
-    return c.json({ error: "Missing required fields" }, 400);
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
   }
+  const parseResult = eventSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title, description, start_time, end_time } = parseResult.data;
   const stmt = db.prepare(
     "INSERT INTO events (title, description, start_time, end_time) VALUES (?, ?, ?, ?)"
   );
@@ -68,8 +107,20 @@ app.get("/api/events/:id", (c) => {
 // Update an event
 app.put("/api/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const body = await c.req.json();
-  const { title, description, start_time, end_time } = body as Partial<Event>;
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = eventUpdateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title, description, start_time, end_time } = parseResult.data;
   const stmt = db.prepare(
     "UPDATE events SET title = ?, description = ?, start_time = ?, end_time = ? WHERE id = ?"
   );

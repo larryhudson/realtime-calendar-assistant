@@ -30,7 +30,16 @@ const fetchOpenAISession = async (): Promise<OpenAISessionResponse> => {
   return await res.json();
 };
 
-import { parseDate, DateValue } from "@internationalized/date";
+import { parseDate } from "@internationalized/date";
+import EventList from "./EventList";
+
+type Event = {
+  id: number;
+  title: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+};
 
 type EventForm = {
   title: string;
@@ -63,6 +72,36 @@ const App: React.FC = () => {
   // State for event form and dialog
   const [eventForm, setEventForm] = useState<EventForm>(INITIAL_EVENT_FORM);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+
+  // State for events list
+  const [events, setEvents] = useState<Event[]>([]);
+  const [eventsLoading, setEventsLoading] = useState<boolean>(true);
+  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+
+  // Fetch events from backend
+  const fetchEvents = async () => {
+    setEventsLoading(true);
+    setEventsError(undefined);
+    try {
+      const res = await fetch("/api/events");
+      if (!res.ok) {
+        throw new Error("Failed to fetch events: " + res.statusText);
+      }
+      const data = await res.json();
+      setEvents(data);
+    } catch (err) {
+      setEventsError(
+        err instanceof Error ? err.message : "Unknown error fetching events"
+      );
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+  // Fetch events on mount
+  React.useEffect(() => {
+    fetchEvents();
+  }, []);
 
   // Establish WebRTC connection to OpenAI Realtime API
   const handleStartConversation = async (): Promise<void> => {
@@ -277,6 +316,8 @@ const App: React.FC = () => {
       setEventDialogOpen(false);
       setEventForm(INITIAL_EVENT_FORM);
       setError(undefined);
+      // Refresh events list after saving
+      fetchEvents();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unknown error creating event"
@@ -384,6 +425,7 @@ const App: React.FC = () => {
             </View>
           )}
         </Flex>
+        <EventList events={events} loading={eventsLoading} error={eventsError} />
       </View>
     </Provider>
   );

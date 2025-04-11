@@ -4,11 +4,6 @@
     "browser": true
   },
   "categories": {
-    "correctness": "error",
-    "nursery": "error",
-    "perf": "error",
-    "restriction": "error",
-    "style": "error",
-    "suspicious": "error"
-  }
+    "correctness": "error"
+  },
 }

@@ -13,6 +13,7 @@ import EventList from "./EventList";
 import { useEventForm } from "./hooks/useEventForm";
 import EventFormDialog from "./components/EventFormDialog";
 import { useOpenAISession } from "./hooks/useOpenAISession";
+import { calendarEventTool, isCalendarEventFunctionArgs } from "./tools/calendarEventTool";
 import { useEvents } from "./hooks/useEvents";
 import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
 import { InstructionsEditor } from "./components/InstructionsEditor";
@@ -36,6 +37,7 @@ const App: React.FC = () => {
     resetEventForm,
   } = useEventForm();
 
+
   // OpenAI session and conversation logic
   const {
     isConversing,
@@ -45,17 +47,20 @@ const App: React.FC = () => {
     handleStartConversation,
     handleStopConversation,
   } = useOpenAISession(
-    (args) => {
-      // Prefill event form when function_call is received
-      openEventDialog({
-        title: args.title || "",
-        description: args.description || "",
-        startDate: args.start_time ? args.start_time.slice(0, 10) : "",
-        startTime: args.start_time ? args.start_time.slice(11, 16) : "",
-        endDate: args.end_time ? args.end_time.slice(0, 10) : "",
-        endTime: args.end_time ? args.end_time.slice(11, 16) : "",
-      });
+    (toolName, args) => {
+      if (toolName === "create_calendar_event" && isCalendarEventFunctionArgs(args)) {
+        openEventDialog({
+          title: args.title || "",
+          description: args.description || "",
+          startDate: args.start_time ? args.start_time.slice(0, 10) : "",
+          startTime: args.start_time ? args.start_time.slice(11, 16) : "",
+          endDate: args.end_time ? args.end_time.slice(0, 10) : "",
+          endTime: args.end_time ? args.end_time.slice(11, 16) : "",
+        });
+      }
+      // Future: handle other tool types here
     },
+    [calendarEventTool],
     selectedModel,
     instructions
   );

@@ -17,15 +17,24 @@ async function fetchOpenAISession(model: string): Promise<OpenAISessionResponse>
   return await res.json();
 }
 
-type CalendarEventFunctionArgs = {
-  title: string;
-  description?: string;
-  start_time: string;
-  end_time: string;
+// Generic function call handler type
+export type OpenAIToolFunctionCallHandler = (toolName: string, args: unknown) => void;
+
+// Tool schema type (loosely matches OpenAI function tool schema)
+export type OpenAIToolSchema = {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
 };
 
 export function useOpenAISession(
-  onFunctionCall?: (args: CalendarEventFunctionArgs) => void,
+  onFunctionCall: OpenAIToolFunctionCallHandler,
+  tools: OpenAIToolSchema[],
   model: string = "gpt-4o-realtime-preview-2024-12-17",
   instructions: string = ""
 ) {
@@ -77,24 +86,7 @@ export function useOpenAISession(
       // 4. Set up data channel for events (function calling, etc.)
       const dc = pc.createDataChannel("oai-events");
 
-      // Function schema for calendar event creation
-      const calendarEventFunction = {
-        type: "function",
-        name: "create_calendar_event",
-        description: "Create a calendar event with structured data.",
-        parameters: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "Event title" },
-            description: { type: "string", description: "Event description" },
-            start_time: { type: "string", description: "Event start time (ISO 8601)" },
-            end_time: { type: "string", description: "Event end time (ISO 8601)" }
-          },
-          required: ["title", "start_time", "end_time"]
-        }
-      };
-
-      // Prefill event form when function_call is received
+      // Listen for function_call messages for any registered tool
       dc.addEventListener("message", (e) => {
         try {
           const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
@@ -106,11 +98,11 @@ export function useOpenAISession(
             for (const item of data.response.output) {
               if (
                 item.type === "function_call" &&
-                item.name === "create_calendar_event" &&
+                typeof item.name === "string" &&
                 typeof item.arguments === "string"
               ) {
                 const args = JSON.parse(item.arguments);
-                if (onFunctionCall) onFunctionCall(args);
+                if (onFunctionCall) onFunctionCall(item.name, args);
               }
             }
           }
@@ -119,19 +111,19 @@ export function useOpenAISession(
         }
       });
 
-      // After connection, send session.update to register the function and instructions
+      // After connection, send session.update to register the tools and instructions
       dc.addEventListener("open", () => {
         const sessionUpdate: {
           type: "session.update";
           session: {
-            tools: typeof calendarEventFunction[];
+            tools: OpenAIToolSchema[];
             tool_choice: string;
             instructions?: string;
           };
         } = {
           type: "session.update",
           session: {
-            tools: [calendarEventFunction],
+            tools: tools,
             tool_choice: "auto"
           }
         };

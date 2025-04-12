@@ -16,7 +16,12 @@ A full-stack calendar assistant project with a modern React frontend and a light
 - Modern UI built with React Spectrum components
 - Backend REST API for calendar event management (CRUD)
 - Persistent storage using SQLite
-- (Planned) Real-time LLM-powered assistant features
+- Real-time LLM-powered assistant features (OpenAI Realtime API integration)
+- **Conversation review and evaluation:**  
+  - Record and upload audio from conversations
+  - Automatic transcription of audio
+  - Add notes and comments with timestamps for evaluation
+  - Review past conversations, audio, transcriptions, and notes in the frontend
 
 ---
 
@@ -94,13 +99,40 @@ npm run dev
 
 ## API Endpoints
 
-The backend exposes the following REST API endpoints for event management:
+The backend exposes the following REST API endpoints:
+
+### Event Management
 
 - `GET    /api/events`         — List all events
 - `POST   /api/events`         — Create a new event
 - `GET    /api/events/:id`     — Get a single event by ID
 - `PUT    /api/events/:id`     — Update an event
 - `DELETE /api/events/:id`     — Delete an event
+
+### Conversation Review & Evaluation
+
+- `GET    /api/conversations`                — List all conversations
+- `POST   /api/conversations`                — Create a new conversation
+- `GET    /api/conversations/:id`            — Get a single conversation by ID
+- `PUT    /api/conversations/:id`            — Update a conversation
+- `DELETE /api/conversations/:id`            — Delete a conversation
+
+#### Audio Recordings
+
+- `POST   /api/conversations/:conversationId/audio` — Upload an audio file for a conversation
+- `GET    /api/conversations/:conversationId/audio` — List audio recordings for a conversation
+
+#### Transcriptions
+
+- `GET    /api/conversations/:conversationId/transcriptions` — List transcriptions for a conversation
+
+#### Notes & Comments
+
+- `GET    /api/conversations/:conversationId/notes` — List notes/comments for a conversation
+- `POST   /api/conversations/:conversationId/notes` — Add a note/comment to a conversation
+
+### Health Check
+
 - `GET    /api/health`         — Health check
 
 ### OpenAI Realtime Session Endpoint
@@ -125,7 +157,9 @@ Returns a JSON object with the ephemeral session token and related metadata.
 
 ## Development Notes
 
-- The frontend is currently a demo UI and does **not** yet connect to the backend API.
+- The frontend now connects to the backend API for event management and conversation review features.
+- Audio files uploaded during conversations are stored in `backend/uploads/` and served via `/uploads/`.
+- The Vite dev server proxies `/api` and `/uploads` requests to the backend for local development.
 - Linting: `npm run lint` (frontend)
 - Testing: `npm run test` (frontend, uses Vitest)
 - Backend is TypeScript. For development, use `npm run dev` (automatic restart on changes via [tsx](https://github.com/esbuild/tsx)).  

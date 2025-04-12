@@ -19,6 +19,20 @@ export function isCalendarEventFunctionArgs(obj: unknown): obj is CalendarEventF
   );
 }
 
+/**
+ * Convert CalendarEventFunctionArgs to the event form object expected by openEventDialog.
+ */
+export function getEventFormFromFunctionArgs(args: CalendarEventFunctionArgs) {
+  return {
+    title: args.title || "",
+    description: args.description || "",
+    startDate: args.start_time ? args.start_time.slice(0, 10) : "",
+    startTime: args.start_time ? args.start_time.slice(11, 16) : "",
+    endDate: args.end_time ? args.end_time.slice(0, 10) : "",
+    endTime: args.end_time ? args.end_time.slice(11, 16) : "",
+  };
+}
+
 // Calendar event tool schema
 export const calendarEventTool: OpenAIToolSchema = {
   type: "function",

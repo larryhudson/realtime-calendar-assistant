@@ -17,11 +17,19 @@ import { calendarEventTool, isCalendarEventFunctionArgs, getEventFormFromFunctio
 import { useEvents } from "./hooks/useEvents";
 import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
 import { InstructionsEditor } from "./components/InstructionsEditor";
+import ConversationReview from "./components/ConversationReview";
+import { useUploadConversationAudio } from "./hooks/useUploadConversationAudio";
 
 const DEFAULT_INSTRUCTIONS =
   "You are a helpful, witty, and friendly AI assistant. Act like a human but remember that you aren't a human and that you can't do human things in the real world. Your voice and personality should be warm and engaging with a lively and playful tone.";
 
 const App: React.FC = () => {
+  // Debug log state
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+
+  function logDebug(message: string) {
+    setDebugLog((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }
   // Model selector state
   const [selectedModel, setSelectedModel] = useState<OpenAIModel>("gpt-4o-realtime-preview-2024-12-17");
   // Instructions state
@@ -46,6 +54,23 @@ const App: React.FC = () => {
     // Future: handle other tool types here
   };
 
+  // Conversation state
+  const [conversationId, setConversationId] = useState<number | null>(null);
+
+  // Audio upload logic (use current conversationId)
+  const { uploadAudio, uploading, error: uploadError, success: uploadSuccess } = useUploadConversationAudio(conversationId);
+
+  // Track audio upload state for debug log
+  React.useEffect(() => {
+    if (uploading) logDebug("Audio uploading...");
+  }, [uploading]);
+  React.useEffect(() => {
+    if (uploadSuccess) logDebug("Audio uploaded successfully.");
+  }, [uploadSuccess]);
+  React.useEffect(() => {
+    if (uploadError) logDebug(`Audio upload error: ${uploadError}`);
+  }, [uploadError]);
+
   // OpenAI session and conversation logic
   const {
     isConversing,
@@ -54,12 +79,25 @@ const App: React.FC = () => {
     audioRef,
     handleStartConversation,
     handleStopConversation,
-  } = useOpenAISession(
-    handleOpenAITool,
-    [calendarEventTool],
-    selectedModel,
-    instructions
-  );
+  } = useOpenAISession({
+    onFunctionCall: handleOpenAITool,
+    tools: [calendarEventTool],
+    model: selectedModel,
+    instructions,
+    onAudioReady: (audio: Blob, filename: string) => {
+      console.log("Inside onAudioReady callback", { audio, filename, conversationId });
+      if (conversationId) {
+        logDebug("Audio ready, starting upload...");
+        uploadAudio(audio, filename);
+      }
+    }
+  });
+
+  // Stop conversation logic: just stop and log, do not create a new conversation
+  const handleStopConversationWithLog = () => {
+    handleStopConversation();
+    logDebug("Conversation stopped.");
+  };
 
   // Events state and logic
   const { events, eventsLoading, eventsError, refreshEvents } = useEvents();
@@ -67,16 +105,52 @@ const App: React.FC = () => {
   // Local state for event form validation errors
   const [formError, setFormError] = useState<string | undefined>(undefined);
 
+  // New: Start conversation logic - create conversation, then start session
+  const handleStartConversationWithCreate = async () => {
+    logDebug("Creating conversation...");
+    try {
+      const res = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "New Conversation" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConversationId(data.id);
+        logDebug(`Conversation created with id ${data.id}.`);
+        // handleStartConversation will be triggered by useEffect below
+      } else {
+        setConversationId(null);
+        logDebug("Failed to create conversation.");
+      }
+    } catch {
+      setConversationId(null);
+      logDebug("Error creating conversation.");
+    }
+  };
+
+  // Start OpenAI session only after conversationId is set
+  React.useEffect(() => {
+    if (conversationId && !isConversing) {
+      handleStartConversation();
+      logDebug("Conversation started.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+
   let conversationButton;
   if (isConversing) {
     conversationButton = (
-      <Button variant="primary" onPress={handleStopConversation}>
+      <Button variant="primary" onPress={handleStopConversationWithLog}>
         Stop Conversation
       </Button>
     );
   } else {
     conversationButton = (
-      <Button variant="primary" onPress={handleStartConversation}>
+      <Button
+        variant="primary"
+        onPress={handleStartConversationWithCreate}
+      >
         Start Conversation
       </Button>
     );
@@ -179,8 +253,21 @@ const App: React.FC = () => {
             onClose={closeEventDialog}
             error={formError}
           />
+
+          {/* Audio upload status */}
+          {uploading && <p>Uploading conversation audio...</p>}
+          {uploadError && <p style={{ color: "red" }}>Audio upload error: {uploadError}</p>}
+          {uploadSuccess && <p style={{ color: "green" }}>Audio uploaded successfully!</p>}
         </Flex>
+        {/* Debug log output */}
+        <View marginTop="size-200" backgroundColor="static-gray-100" padding="size-200" borderRadius="regular">
+          <Heading level={4}>Debug Log</Heading>
+          <pre style={{ maxHeight: 200, overflow: "auto", fontSize: 12 }}>
+            {debugLog.join("\n")}
+          </pre>
+        </View>
         <EventList events={events} loading={eventsLoading} error={eventsError} />
+        <ConversationReview />
       </View>
     </Provider>
   );

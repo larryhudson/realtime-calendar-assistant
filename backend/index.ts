@@ -1,9 +1,12 @@
 import { Hono } from "hono";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { serve } from "@hono/node-server";
 import Database from "better-sqlite3";
 import path from "path";
 import axios from "axios";
 import { z } from "zod";
+import fs from "fs";
+import crypto from "crypto";
 
 // Event type definition
 interface Event {
@@ -14,11 +17,23 @@ interface Event {
   end_time: string;
 }
 
+/**
+ * Conversation type definition
+ */
+interface Conversation {
+  id: number;
+  title: string;
+  created_at: string;
+}
+
 // Database setup
 const dbPath = path.join(__dirname, "data.sqlite");
 const db = new Database(dbPath);
 
-// Example schema: events table for a calendar assistant
+/**
+ * Schema: events table for a calendar assistant
+ * Plus: evaluation tools tables (conversations, audio_recordings, transcriptions, notes)
+ */
 db.exec(`
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +41,37 @@ db.exec(`
     description TEXT,
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS audio_recordings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS transcriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    audio_recording_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (audio_recording_id) REFERENCES audio_recordings(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    author TEXT,
+    content TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
   );
 `);
 
@@ -45,6 +91,7 @@ const eventSchema = z.object({
   ),
 });
 
+// Event update schema
 const eventUpdateSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
@@ -58,11 +105,280 @@ const eventUpdateSchema = z.object({
   ),
 });
 
-// Hono app setup
+/**
+ * Zod schemas for conversation validation
+ */
+const conversationSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
+const conversationUpdateSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
+ // Hono app setup
 const app = new Hono();
 
+// Serve static files from /uploads at /uploads/*
+app.use(
+  "/uploads/*",
+  serveStatic({
+    root: "./",
+  })
+);
+
+// Health check endpoint
 // Health check endpoint
 app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+/**
+ * Conversation endpoints
+ */
+
+// Get all conversations
+app.get("/api/conversations", (c) => {
+  const conversations = db.prepare("SELECT * FROM conversations ORDER BY created_at DESC").all() as Conversation[];
+  return c.json(conversations);
+});
+
+// Create a new conversation
+app.post("/api/conversations", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = conversationSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title } = parseResult.data;
+  const stmt = db.prepare(
+    "INSERT INTO conversations (title) VALUES (?)"
+  );
+  const info = stmt.run(title);
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(info.lastInsertRowid) as Conversation;
+  return c.json(conversation, 201);
+});
+
+// Get a single conversation by ID
+app.get("/api/conversations/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Conversation | undefined;
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  return c.json(conversation);
+});
+
+// Update a conversation
+app.put("/api/conversations/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = conversationUpdateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title } = parseResult.data;
+  const stmt = db.prepare(
+    "UPDATE conversations SET title = ? WHERE id = ?"
+  );
+  const info = stmt.run(title, id);
+  if (info.changes === 0) {
+    return c.json({ error: "Conversation not found or no changes made" }, 404);
+  }
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Conversation;
+  return c.json(conversation);
+});
+
+// Delete a conversation
+app.delete("/api/conversations/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const stmt = db.prepare("DELETE FROM conversations WHERE id = ?");
+  const info = stmt.run(id);
+  if (info.changes === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  return c.json({ success: true });
+});
+
+
+/**
+ * Audio recording endpoints
+ */
+
+// POST /api/conversations/:conversationId/audio - upload audio file
+app.post("/api/conversations/:conversationId/audio", async (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  const body = await c.req.parseBody();
+  const file = body["file"];
+  if (!file || typeof file === "string") {
+    return c.json({ error: "No file uploaded" }, 400);
+  }
+
+  // Generate unique filename
+  const ext = file.name ? file.name.split(".").pop() : "wav";
+  const filename = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+  const uploadPath = path.join(__dirname, "uploads", filename);
+
+  // Save file to disk
+  const arrayBuffer = await file.arrayBuffer();
+  fs.writeFileSync(uploadPath, Buffer.from(arrayBuffer));
+
+  // Insert into audio_recordings table
+  const stmt = db.prepare(
+    "INSERT INTO audio_recordings (conversation_id, file_path) VALUES (?, ?)"
+  );
+  const info = stmt.run(conversationId, filename);
+  const audioRecording = db.prepare("SELECT * FROM audio_recordings WHERE id = ?").get(info.lastInsertRowid) as {
+    id: number;
+    conversation_id: number;
+    file_path: string;
+    created_at: string;
+  };
+
+  return c.json({
+    id: audioRecording.id,
+    conversation_id: audioRecording.conversation_id,
+    file_path: audioRecording.file_path,
+    created_at: audioRecording.created_at,
+  }, 201);
+});
+
+// GET /api/conversations/:conversationId/audio - list audio recordings for a conversation
+app.get("/api/conversations/:conversationId/audio", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  const recordings = db.prepare(
+    "SELECT id, conversation_id, file_path, created_at FROM audio_recordings WHERE conversation_id = ? ORDER BY created_at DESC"
+  ).all(conversationId) as {
+    id: number;
+    conversation_id: number;
+    file_path: string;
+    created_at: string;
+  }[];
+  // Add url property to each recording
+  const withUrls = recordings.map((rec) => ({
+    ...rec,
+    url: `/uploads/${rec.file_path}`,
+  }));
+  return c.json(withUrls);
+});
+
+// GET /api/conversations/:conversationId/transcriptions - list transcriptions for a conversation
+app.get("/api/conversations/:conversationId/transcriptions", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  // Get all transcriptions for audio_recordings belonging to this conversation
+  const transcriptions = db.prepare(
+    `SELECT t.id, t.audio_recording_id, t.text, t.created_at
+     FROM transcriptions t
+     JOIN audio_recordings a ON t.audio_recording_id = a.id
+     WHERE a.conversation_id = ?
+     ORDER BY t.created_at DESC`
+  ).all(conversationId) as {
+    id: number;
+    audio_recording_id: number;
+    text: string;
+    created_at: string;
+  }[];
+  return c.json(transcriptions);
+});
+
+/**
+ * Notes endpoints
+ */
+
+// GET /api/conversations/:conversationId/notes - list notes for a conversation
+app.get("/api/conversations/:conversationId/notes", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  const notes = db.prepare(
+    `SELECT id, author, content, timestamp
+     FROM notes
+     WHERE conversation_id = ?
+     ORDER BY timestamp ASC`
+  ).all(conversationId) as {
+    id: number;
+    author: string | null;
+    content: string;
+    timestamp: string;
+  }[];
+  return c.json(notes);
+});
+
+// POST /api/conversations/:conversationId/notes - add a note to a conversation
+app.post("/api/conversations/:conversationId/notes", async (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  // Validate input
+  const noteSchema = z.object({
+    content: z.string().min(1).max(2000),
+    timestamp: z.string().min(1), // ISO string or seconds as string
+    author: z.string().max(100).optional(),
+  });
+  const parseResult = noteSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { content, timestamp, author } = parseResult.data;
+  const stmt = db.prepare(
+    "INSERT INTO notes (conversation_id, author, content, timestamp) VALUES (?, ?, ?, ?)"
+  );
+  const info = stmt.run(conversationId, author || null, content, timestamp);
+  const note = db.prepare(
+    "SELECT id, author, content, timestamp FROM notes WHERE id = ?"
+  ).get(info.lastInsertRowid) as {
+    id: number;
+    author: string | null;
+    content: string;
+    timestamp: string;
+  };
+  return c.json(note, 201);
+});
 
 // Get all events
 app.get("/api/events", (c) => {

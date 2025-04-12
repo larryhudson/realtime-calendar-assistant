@@ -311,6 +311,10 @@ app.get("/api/conversations/:conversationId/transcriptions", (c) => {
   return c.json(transcriptions);
 });
 
+/**
+ * Notes endpoints
+ */
+
 // GET /api/conversations/:conversationId/notes - list notes for a conversation
 app.get("/api/conversations/:conversationId/notes", (c) => {
   const conversationId = Number(c.req.param("conversationId"));
@@ -331,6 +335,49 @@ app.get("/api/conversations/:conversationId/notes", (c) => {
     timestamp: string;
   }[];
   return c.json(notes);
+});
+
+// POST /api/conversations/:conversationId/notes - add a note to a conversation
+app.post("/api/conversations/:conversationId/notes", async (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  // Validate input
+  const noteSchema = z.object({
+    content: z.string().min(1).max(2000),
+    timestamp: z.string().min(1), // ISO string or seconds as string
+    author: z.string().max(100).optional(),
+  });
+  const parseResult = noteSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { content, timestamp, author } = parseResult.data;
+  const stmt = db.prepare(
+    "INSERT INTO notes (conversation_id, author, content, timestamp) VALUES (?, ?, ?, ?)"
+  );
+  const info = stmt.run(conversationId, author || null, content, timestamp);
+  const note = db.prepare(
+    "SELECT id, author, content, timestamp FROM notes WHERE id = ?"
+  ).get(info.lastInsertRowid) as {
+    id: number;
+    author: string | null;
+    content: string;
+    timestamp: string;
+  };
+  return c.json(note, 201);
 });
 
 // Get all events

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 export interface Conversation {
-  id: string;
+  id: number;
   title?: string;
   created_at: string;
   // Add other fields as needed

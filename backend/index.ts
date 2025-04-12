@@ -254,6 +254,25 @@ app.post("/api/conversations/:conversationId/audio", async (c) => {
   }, 201);
 });
 
+// GET /api/conversations/:conversationId/audio - list audio recordings for a conversation
+app.get("/api/conversations/:conversationId/audio", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  const recordings = db.prepare(
+    "SELECT id, conversation_id, file_path, created_at FROM audio_recordings WHERE conversation_id = ? ORDER BY created_at DESC"
+  ).all(conversationId) as {
+    id: number;
+    conversation_id: number;
+    file_path: string;
+    created_at: string;
+  }[];
+  return c.json(recordings);
+});
+
 // Get all events
 app.get("/api/events", (c) => {
   const events = db.prepare("SELECT * FROM events").all() as Event[];

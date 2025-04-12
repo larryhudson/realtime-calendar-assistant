@@ -273,6 +273,30 @@ app.get("/api/conversations/:conversationId/audio", (c) => {
   return c.json(recordings);
 });
 
+// GET /api/conversations/:conversationId/transcriptions - list transcriptions for a conversation
+app.get("/api/conversations/:conversationId/transcriptions", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  // Get all transcriptions for audio_recordings belonging to this conversation
+  const transcriptions = db.prepare(
+    `SELECT t.id, t.audio_recording_id, t.text, t.created_at
+     FROM transcriptions t
+     JOIN audio_recordings a ON t.audio_recording_id = a.id
+     WHERE a.conversation_id = ?
+     ORDER BY t.created_at DESC`
+  ).all(conversationId) as {
+    id: number;
+    audio_recording_id: number;
+    text: string;
+    created_at: string;
+  }[];
+  return c.json(transcriptions);
+});
+
 // Get all events
 app.get("/api/events", (c) => {
   const events = db.prepare("SELECT * FROM events").all() as Event[];

@@ -9,6 +9,42 @@ import { useConversations } from "../hooks/useConversations";
  * This is the entry point for the evaluation tools frontend.
  */
 import { useConversationAudio } from "../hooks/useConversationAudio";
+import { useConversationTranscriptions } from "../hooks/useConversationTranscriptions";
+
+function TranscriptionsPanel({ conversationId }: { conversationId: number }) {
+  const { transcriptions, loading, error } = useConversationTranscriptions(conversationId);
+
+  return (
+    <View>
+      <Heading level={4}>Transcriptions</Heading>
+      {loading ? (
+        <ProgressCircle aria-label="Loading transcriptions…" isIndeterminate size="S" />
+      ) : error ? (
+        <div style={{ color: "red" }}>
+          <Text>Error: {error}</Text>
+        </div>
+      ) : transcriptions.length === 0 ? (
+        <Text>No transcriptions found for this conversation.</Text>
+      ) : (
+        <View>
+          {transcriptions.map((t) => (
+            <View key={t.id} marginBottom="size-150">
+              <Text>
+                <strong>Audio #{t.audio_id}</strong> —{" "}
+                <span style={{ color: "#888" }}>
+                  {new Date(t.created_at).toLocaleString()}
+                </span>
+              </Text>
+              <View backgroundColor="static-white" padding="size-100" borderRadius="small" marginTop="size-50">
+                <Text>{t.text}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 function AudioRecordings({ conversationId }: { conversationId: number }) {
   const { audio, loading, error } = useConversationAudio(conversationId);
@@ -106,7 +142,10 @@ export default function ConversationReview() {
             <Divider marginY="size-200" />
             {/* Audio Recordings */}
             <AudioRecordings conversationId={selectedConversation.id} />
-            {/* TODO: Display transcriptions and notes/comments */}
+            <Divider marginY="size-200" />
+            {/* Transcriptions */}
+            <TranscriptionsPanel conversationId={selectedConversation.id} />
+            {/* TODO: Display notes/comments */}
             <Divider marginY="size-200" />
             <Text>
               Conversation details and evaluation tools will appear here.

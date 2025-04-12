@@ -324,18 +324,30 @@ app.post("/api/conversations", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON" }, 400);
   }
-  const parseResult = conversationSchema.safeParse(body);
+  // Accept optional prompt_version_id
+  const extendedSchema = conversationSchema.extend({
+    prompt_version_id: z.number().int().optional(),
+  });
+  const parseResult = extendedSchema.safeParse(body);
   if (!parseResult.success) {
     return c.json(
       { error: "Validation failed", details: parseResult.error.flatten() },
       400
     );
   }
-  const { title } = parseResult.data;
-  const stmt = db.prepare(
-    "INSERT INTO conversations (title) VALUES (?)"
-  );
-  const info = stmt.run(title);
+  const { title, prompt_version_id } = parseResult.data;
+  let stmt, info;
+  if (prompt_version_id) {
+    stmt = db.prepare(
+      "INSERT INTO conversations (title, prompt_version_id) VALUES (?, ?)"
+    );
+    info = stmt.run(title, prompt_version_id);
+  } else {
+    stmt = db.prepare(
+      "INSERT INTO conversations (title) VALUES (?)"
+    );
+    info = stmt.run(title);
+  }
   const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(info.lastInsertRowid) as Conversation;
   return c.json(conversation, 201);
 });
@@ -343,7 +355,16 @@ app.post("/api/conversations", async (c) => {
 // Get a single conversation by ID
 app.get("/api/conversations/:id", (c) => {
   const id = Number(c.req.param("id"));
-  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Conversation | undefined;
+  // Join with prompt_versions and prompts if prompt_version_id is set
+  const conversation = db.prepare(`
+    SELECT c.*, 
+      p.name as prompt_name, 
+      v.text as prompt_text
+    FROM conversations c
+    LEFT JOIN prompt_versions v ON c.prompt_version_id = v.id
+    LEFT JOIN prompts p ON v.prompt_id = p.id
+    WHERE c.id = ?
+  `).get(id) as (Conversation & { prompt_name?: string; prompt_text?: string }) | undefined;
   if (!conversation) {
     return c.json({ error: "Conversation not found" }, 404);
   }

@@ -16,7 +16,7 @@ import { useOpenAISession } from "./hooks/useOpenAISession";
 import { calendarEventTool, isCalendarEventFunctionArgs, getEventFormFromFunctionArgs } from "./tools/calendarEventTool";
 import { useEvents } from "./hooks/useEvents";
 import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
-import { InstructionsEditor } from "./components/InstructionsEditor";
+import { PromptSelector } from "./components/PromptSelector";
 import ConversationReview from "./components/ConversationReview";
 import { useUploadConversationAudio } from "./hooks/useUploadConversationAudio";
 
@@ -34,6 +34,8 @@ const App: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<OpenAIModel>("gpt-4o-realtime-preview-2024-12-17");
   // Instructions state
   const [instructions, setInstructions] = useState<string>(DEFAULT_INSTRUCTIONS);
+  // Track selected prompt version
+  const [selectedPromptVersionId, setSelectedPromptVersionId] = useState<number | null>(null);
 
   // Event form and dialog state/logic
   const {
@@ -109,10 +111,14 @@ const App: React.FC = () => {
   const handleStartConversationWithCreate = async () => {
     logDebug("Creating conversation...");
     try {
+      const body: Record<string, any> = { title: "New Conversation" };
+      if (selectedPromptVersionId) {
+        body.prompt_version_id = selectedPromptVersionId;
+      }
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Conversation" }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         const data = await res.json();
@@ -218,10 +224,11 @@ const App: React.FC = () => {
             disabled={isConversing}
           />
 
-          <InstructionsEditor
+          <PromptSelector
             value={instructions}
             onChange={setInstructions}
             disabled={isConversing}
+            onPromptVersionIdChange={setSelectedPromptVersionId}
           />
 
           {conversationButton}

@@ -43,10 +43,29 @@ db.exec(`
     end_time TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS prompt_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    version_number INTEGER NOT NULL,
+    FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    prompt_version_id INTEGER,
+    FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id)
   );
 
   CREATE TABLE IF NOT EXISTS audio_recordings (

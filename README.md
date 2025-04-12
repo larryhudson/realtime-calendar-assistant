@@ -95,6 +95,24 @@ The backend exposes the following REST API endpoints for event management:
 - `DELETE /api/events/:id`     — Delete an event
 - `GET    /api/health`         — Health check
 
+### OpenAI Realtime Session Endpoint
+
+- `GET /api/openai/session?model=MODEL_NAME` — Mint an ephemeral OpenAI session token for use with the OpenAI Realtime API.
+
+**Query Parameters:**
+- `model` (optional): The OpenAI model to use. Must be one of the allowed values below. If omitted, defaults to `gpt-4o-realtime-preview-2024-12-17`.
+
+**Allowed Models:**
+- `gpt-4o-realtime-preview-2024-12-17`
+- `gpt-4o-mini-realtime-preview-2024-12-17`
+
+**Example:**
+```bash
+curl "http://localhost:3001/api/openai/session?model=gpt-4o"
+```
+
+Returns a JSON object with the ephemeral session token and related metadata.
+
 ---
 
 ## Development Notes

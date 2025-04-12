@@ -15,10 +15,16 @@ import EventFormDialog from "./components/EventFormDialog";
 import { useOpenAISession } from "./hooks/useOpenAISession";
 import { useEvents } from "./hooks/useEvents";
 import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
+import { InstructionsEditor } from "./components/InstructionsEditor";
+
+const DEFAULT_INSTRUCTIONS =
+  "You are a helpful, witty, and friendly AI assistant. Act like a human but remember that you aren't a human and that you can't do human things in the real world. Your voice and personality should be warm and engaging with a lively and playful tone.";
 
 const App: React.FC = () => {
   // Model selector state
   const [selectedModel, setSelectedModel] = useState<OpenAIModel>("gpt-4o-realtime-preview-2024-12-17");
+  // Instructions state
+  const [instructions, setInstructions] = useState<string>(DEFAULT_INSTRUCTIONS);
 
   // Event form and dialog state/logic
   const {
@@ -50,7 +56,8 @@ const App: React.FC = () => {
         endTime: args.end_time ? args.end_time.slice(11, 16) : "",
       });
     },
-    selectedModel
+    selectedModel,
+    instructions
   );
 
   // Events state and logic
@@ -133,6 +140,12 @@ const App: React.FC = () => {
           <ModelSelector
             value={selectedModel}
             onChange={setSelectedModel}
+            disabled={isConversing}
+          />
+
+          <InstructionsEditor
+            value={instructions}
+            onChange={setInstructions}
             disabled={isConversing}
           />
 

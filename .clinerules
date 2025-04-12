@@ -51,6 +51,7 @@ When starting a new task, make sure you are on the main branch and have the late
 - **Frontend:**  
   - Located in the `frontend/` directory.
   - Built with React and TypeScript.
+  - Uses [React Spectrum](https://react-spectrum.adobe.com/) as the component library for all UI elements.
   - Uses Vite for development and bundling (`vite.config.ts`).
   - Linting is enforced with ESLint (`eslint.config.js`) and Oxlint (`.oxlintrc.json`).
   - Testing is set up with Vitest (`vitest.config.ts`).

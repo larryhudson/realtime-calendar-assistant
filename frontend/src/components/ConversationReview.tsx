@@ -184,11 +184,52 @@ function AudioRecordings({ conversationId }: { conversationId: number }) {
   );
 }
 
+type ConversationDetails = {
+  id: number;
+  title: string | null;
+  created_at: string;
+  prompt_name?: string;
+  prompt_text?: string;
+  // Add any other fields as needed
+};
+
+function isConversationWithPromptDetails(
+  conv: unknown
+): conv is ConversationDetails & { prompt_name: string; prompt_text: string } {
+  if (typeof conv !== "object" || conv === null) return false;
+  const obj = conv as { [key: string]: unknown };
+  return (
+    typeof obj.prompt_name === "string" &&
+    !!obj.prompt_name
+  );
+}
+
 export default function ConversationReview() {
   const { conversations, loading, error } = useConversations();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
+  // Store details loaded from /api/conversations/:id
+  const [selectedConversationDetails, setSelectedConversationDetails] = useState<ConversationDetails | null>(null);
   const selectedConversation = conversations.find((c) => c.id === selectedId);
+
+  // Fetch details when selectedId changes
+  React.useEffect(() => {
+    if (selectedId == null) {
+      setSelectedConversationDetails(null);
+      return;
+    }
+    let cancelled = false;
+    setSelectedConversationDetails(null);
+    fetch(`/api/conversations/${selectedId}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!cancelled && data) setSelectedConversationDetails(data);
+      });
+    return () => { cancelled = true; };
+  }, [selectedId]);
+
+  // Prefer details from API if loaded, else fallback to list
+  const conversationToShow = selectedConversationDetails || selectedConversation;
 
   return (
     <View padding="size-200">
@@ -233,26 +274,36 @@ export default function ConversationReview() {
             </ListView>
           )}
         </View>
-        {selectedConversation && (
+        {conversationToShow && (
           <View marginTop="size-300" backgroundColor="static-gray-50" padding="size-200" borderRadius="regular">
             <Heading level={3}>
-              {selectedConversation.title
-                ? selectedConversation.title
-                : `Conversation ${selectedConversation.id}`}
+              {conversationToShow.title
+                ? conversationToShow.title
+                : `Conversation ${conversationToShow.id}`}
             </Heading>
             <Text>
               <strong>Created:</strong>{" "}
-              {new Date(selectedConversation.created_at).toLocaleString()}
+              {new Date(conversationToShow.created_at).toLocaleString()}
             </Text>
+            {isConversationWithPromptDetails(conversationToShow) && (
+              <View marginTop="size-150" marginBottom="size-150">
+                <Text>
+                  <strong>Prompt:</strong> {conversationToShow.prompt_name}
+                </Text>
+                <View backgroundColor="static-white" padding="size-100" borderRadius="small" marginTop="size-50">
+                  <Text>{conversationToShow.prompt_text}</Text>
+                </View>
+              </View>
+            )}
             <Divider marginY="size-200" />
             {/* Audio Recordings */}
-            <AudioRecordings conversationId={selectedConversation.id} />
+            <AudioRecordings conversationId={conversationToShow.id} />
             <Divider marginY="size-200" />
             {/* Transcriptions */}
-            <TranscriptionsPanel conversationId={selectedConversation.id} />
+            <TranscriptionsPanel conversationId={conversationToShow.id} />
             <Divider marginY="size-200" />
             {/* Notes/Comments */}
-            <NotesPanel conversationId={selectedConversation.id} />
+            <NotesPanel conversationId={conversationToShow.id} />
             <Divider marginY="size-200" />
             <Text>
               Conversation details and evaluation tools will appear here.

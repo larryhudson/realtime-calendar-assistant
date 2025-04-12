@@ -8,8 +8,6 @@ import {
   TextField,
   View,
   defaultTheme,
-  TextArea,
-  DatePicker,
 } from "@adobe/react-spectrum";
 
 const INITIAL_COUNT = 0;
@@ -30,8 +28,9 @@ const fetchOpenAISession = async (): Promise<OpenAISessionResponse> => {
   return await res.json();
 };
 
-import { parseDate } from "@internationalized/date";
 import EventList from "./EventList";
+import { useEventForm } from "./hooks/useEventForm";
+import EventFormDialog from "./components/EventFormDialog";
 
 type Event = {
   id: number;
@@ -41,23 +40,6 @@ type Event = {
   end_time: string;
 };
 
-type EventForm = {
-  title: string;
-  description: string;
-  startDate: string; // yyyy-mm-dd
-  startTime: string; // HH:mm
-  endDate: string;   // yyyy-mm-dd
-  endTime: string;   // HH:mm
-};
-
-const INITIAL_EVENT_FORM: EventForm = {
-  title: "",
-  description: "",
-  startDate: "",
-  startTime: "",
-  endDate: "",
-  endTime: "",
-};
 
 const App: React.FC = () => {
   const [count, setCount] = useState<number>(INITIAL_COUNT);
@@ -69,9 +51,15 @@ const App: React.FC = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // State for event form and dialog
-  const [eventForm, setEventForm] = useState<EventForm>(INITIAL_EVENT_FORM);
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  // Event form and dialog state/logic
+  const {
+    eventForm,
+    eventDialogOpen,
+    openEventDialog,
+    closeEventDialog,
+    handleEventFormChange,
+    resetEventForm,
+  } = useEventForm();
 
   // State for events list
   const [events, setEvents] = useState<Event[]>([]);
@@ -179,16 +167,14 @@ const App: React.FC = () => {
                 const args = JSON.parse(item.arguments);
                 console.log({args})
                 // Prefill event form state (if available in args)
-                setEventForm((prev) => ({
-                  ...prev,
+                openEventDialog({
                   title: args.title || "",
                   description: args.description || "",
                   startDate: args.start_time ? args.start_time.slice(0, 10) : "",
                   startTime: args.start_time ? args.start_time.slice(11, 16) : "",
                   endDate: args.end_time ? args.end_time.slice(0, 10) : "",
                   endTime: args.end_time ? args.end_time.slice(11, 16) : "",
-                }));
-                setEventDialogOpen(true);
+                });
               }
             }
           }
@@ -272,14 +258,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Handlers for event form dialog
-  const handleEventFormChange = (field: keyof EventForm, value: string) => {
-    setEventForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleCloseEventDialog = () => {
-    setEventDialogOpen(false);
-  };
 
   // Save event to backend
   const handleSaveEvent = async () => {
@@ -313,8 +291,8 @@ const App: React.FC = () => {
         throw new Error("Failed to create event: " + res.statusText);
       }
       // Optionally, you could use the returned event here
-      setEventDialogOpen(false);
-      setEventForm(INITIAL_EVENT_FORM);
+      closeEventDialog();
+      resetEventForm();
       setError(undefined);
       // Refresh events list after saving
       fetchEvents();
@@ -366,64 +344,15 @@ const App: React.FC = () => {
             </View>
           )}
 
-          {/* Inline Calendar Event Form (shown when eventDialogOpen is true) */}
-          {eventDialogOpen && (
-            <View
-              borderWidth="thin"
-              borderColor="dark"
-              padding="size-200"
-              marginTop="size-200"
-              backgroundColor="gray-50"
-              maxWidth="size-3600"
-              width="100%"
-            >
-              <Heading level={2}>Prefilled Calendar Event</Heading>
-              <Flex direction="column" gap="size-200">
-                <TextField
-                  label="Title"
-                  value={eventForm.title}
-                  onChange={(v) => handleEventFormChange("title", v)}
-                />
-                <TextArea
-                  label="Description"
-                  value={eventForm.description}
-                  onChange={(v) => handleEventFormChange("description", v)}
-                />
-                <DatePicker
-                  label="Start Date"
-                  value={eventForm.startDate ? parseDate(eventForm.startDate) : null}
-                  onChange={(value) =>
-                    handleEventFormChange("startDate", value ? value.toString() : "")
-                  }
-                />
-                <TextField
-                  label="Start Time (HH:mm)"
-                  value={eventForm.startTime}
-                  onChange={(v) => handleEventFormChange("startTime", v)}
-                />
-                <DatePicker
-                  label="End Date"
-                  value={eventForm.endDate ? parseDate(eventForm.endDate) : null}
-                  onChange={(value) =>
-                    handleEventFormChange("endDate", value ? value.toString() : "")
-                  }
-                />
-                <TextField
-                  label="End Time (HH:mm)"
-                  value={eventForm.endTime}
-                  onChange={(v) => handleEventFormChange("endTime", v)}
-                />
-                <Flex direction="row" gap="size-200">
-                  <Button variant="primary" onPress={handleSaveEvent}>
-                    Save Event
-                  </Button>
-                  <Button variant="secondary" onPress={handleCloseEventDialog}>
-                    Close
-                  </Button>
-                </Flex>
-              </Flex>
-            </View>
-          )}
+          {/* Calendar Event Form Dialog */}
+          <EventFormDialog
+            eventForm={eventForm}
+            eventDialogOpen={eventDialogOpen}
+            onChange={handleEventFormChange}
+            onSave={handleSaveEvent}
+            onClose={closeEventDialog}
+            error={error}
+          />
         </Flex>
         <EventList events={events} loading={eventsLoading} error={eventsError} />
       </View>

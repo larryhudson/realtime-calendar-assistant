@@ -10,6 +10,42 @@ import { useConversations } from "../hooks/useConversations";
  */
 import { useConversationAudio } from "../hooks/useConversationAudio";
 import { useConversationTranscriptions } from "../hooks/useConversationTranscriptions";
+import { useConversationNotes } from "../hooks/useConversationNotes";
+
+function NotesPanel({ conversationId }: { conversationId: number }) {
+  const { notes, loading, error } = useConversationNotes(conversationId);
+
+  return (
+    <View>
+      <Heading level={4}>Notes & Comments</Heading>
+      {loading ? (
+        <ProgressCircle aria-label="Loading notes…" isIndeterminate size="S" />
+      ) : error ? (
+        <div style={{ color: "red" }}>
+          <Text>Error: {error}</Text>
+        </div>
+      ) : notes.length === 0 ? (
+        <Text>No notes or comments for this conversation.</Text>
+      ) : (
+        <View>
+          {notes.map((note) => (
+            <View key={note.id} marginBottom="size-150">
+              <Text>
+                <strong>{note.author ? note.author : "Anonymous"}</strong> —{" "}
+                <span style={{ color: "#888" }}>
+                  {new Date(note.timestamp).toLocaleString()}
+                </span>
+              </Text>
+              <View backgroundColor="static-white" padding="size-100" borderRadius="small" marginTop="size-50">
+                <Text>{note.content}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 function TranscriptionsPanel({ conversationId }: { conversationId: number }) {
   const { transcriptions, loading, error } = useConversationTranscriptions(conversationId);
@@ -145,7 +181,9 @@ export default function ConversationReview() {
             <Divider marginY="size-200" />
             {/* Transcriptions */}
             <TranscriptionsPanel conversationId={selectedConversation.id} />
-            {/* TODO: Display notes/comments */}
+            <Divider marginY="size-200" />
+            {/* Notes/Comments */}
+            <NotesPanel conversationId={selectedConversation.id} />
             <Divider marginY="size-200" />
             <Text>
               Conversation details and evaluation tools will appear here.

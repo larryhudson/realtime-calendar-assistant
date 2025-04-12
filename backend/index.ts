@@ -297,6 +297,28 @@ app.get("/api/conversations/:conversationId/transcriptions", (c) => {
   return c.json(transcriptions);
 });
 
+// GET /api/conversations/:conversationId/notes - list notes for a conversation
+app.get("/api/conversations/:conversationId/notes", (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  const notes = db.prepare(
+    `SELECT id, author, content, timestamp
+     FROM notes
+     WHERE conversation_id = ?
+     ORDER BY timestamp ASC`
+  ).all(conversationId) as {
+    id: number;
+    author: string | null;
+    content: string;
+    timestamp: string;
+  }[];
+  return c.json(notes);
+});
+
 // Get all events
 app.get("/api/events", (c) => {
   const events = db.prepare("SELECT * FROM events").all() as Event[];

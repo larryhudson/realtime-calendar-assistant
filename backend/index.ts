@@ -43,10 +43,29 @@ db.exec(`
     end_time TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS prompt_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    version_number INTEGER NOT NULL,
+    FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    prompt_version_id INTEGER,
+    FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id)
   );
 
   CREATE TABLE IF NOT EXISTS audio_recordings (
@@ -78,6 +97,20 @@ db.exec(`
 /**
  * Zod schemas for input validation
  */
+
+// Prompt schemas
+const promptSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+});
+const promptUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(1000).optional(),
+});
+const promptVersionSchema = z.object({
+  text: z.string().min(1).max(8000),
+});
+
 const eventSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
@@ -126,6 +159,148 @@ app.use(
     root: "./",
   })
 );
+
+/**
+ * Prompt endpoints
+ */
+
+// List all prompts with latest version info
+app.get("/api/prompts", (c) => {
+  const prompts = db.prepare(`
+    SELECT p.*, v.id as latest_version_id, v.text as latest_text, v.version_number as latest_version_number, v.created_at as latest_version_created_at
+    FROM prompts p
+    LEFT JOIN (
+      SELECT pv1.*
+      FROM prompt_versions pv1
+      INNER JOIN (
+        SELECT prompt_id, MAX(version_number) as max_version
+        FROM prompt_versions
+        GROUP BY prompt_id
+      ) pv2
+      ON pv1.prompt_id = pv2.prompt_id AND pv1.version_number = pv2.max_version
+    ) v ON p.id = v.prompt_id
+    ORDER BY p.created_at DESC
+  `).all() as any[];
+  return c.json(prompts);
+});
+
+// Create a new prompt (and initial version)
+app.post("/api/prompts", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = promptSchema.extend({ text: z.string().min(1).max(8000) }).safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ error: "Validation failed", details: parseResult.error.flatten() }, 400);
+  }
+  const { name, description, text } = parseResult.data;
+  const promptStmt = db.prepare(
+    "INSERT INTO prompts (name, description) VALUES (?, ?)"
+  );
+  const promptInfo = promptStmt.run(name, description || null);
+  const promptId = promptInfo.lastInsertRowid;
+  const versionStmt = db.prepare(
+    "INSERT INTO prompt_versions (prompt_id, text, version_number) VALUES (?, ?, ?)"
+  );
+  versionStmt.run(promptId, text, 1);
+  const prompt = db.prepare("SELECT * FROM prompts WHERE id = ?").get(promptId) as Record<string, any> | undefined;
+  return c.json(prompt ?? {}, 201);
+});
+
+// Get a prompt and all its versions
+app.get("/api/prompts/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const prompt = db.prepare("SELECT * FROM prompts WHERE id = ?").get(id) as Record<string, any> | undefined;
+  if (!prompt) {
+    return c.json({ error: "Prompt not found" }, 404);
+  }
+  const versions = db.prepare(
+    "SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY version_number ASC"
+  ).all(id) as any[];
+  return c.json({ ...prompt, versions });
+});
+
+// Update prompt metadata
+app.put("/api/prompts/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = promptUpdateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ error: "Validation failed", details: parseResult.error.flatten() }, 400);
+  }
+  const { name, description } = parseResult.data;
+  const stmt = db.prepare(
+    "UPDATE prompts SET name = COALESCE(?, name), description = COALESCE(?, description), updated_at = datetime('now') WHERE id = ?"
+  );
+  const info = stmt.run(name, description, id);
+  if (info.changes === 0) {
+    return c.json({ error: "Prompt not found or no changes made" }, 404);
+  }
+  const prompt = db.prepare("SELECT * FROM prompts WHERE id = ?").get(id) as Record<string, any> | undefined;
+  return c.json(prompt ?? {});
+});
+
+// Add a new version to a prompt
+app.post("/api/prompts/:id/versions", async (c) => {
+  const id = Number(c.req.param("id"));
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = promptVersionSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json({ error: "Validation failed", details: parseResult.error.flatten() }, 400);
+  }
+  const { text } = parseResult.data;
+  // Get latest version number
+  const latest = db.prepare(
+    "SELECT MAX(version_number) as max_version FROM prompt_versions WHERE prompt_id = ?"
+  ).get(id) as { max_version?: number } | undefined;
+  const nextVersion = (latest?.max_version || 0) + 1;
+  const stmt = db.prepare(
+    "INSERT INTO prompt_versions (prompt_id, text, version_number) VALUES (?, ?, ?)"
+  );
+  const info = stmt.run(id, text, nextVersion);
+  const version = db.prepare("SELECT * FROM prompt_versions WHERE id = ?").get(info.lastInsertRowid) as Record<string, any> | undefined;
+  return c.json(version ?? {}, 201);
+});
+
+// List all versions for a prompt
+app.get("/api/prompts/:id/versions", (c) => {
+  const id = Number(c.req.param("id"));
+  const versions = db.prepare(
+    "SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY version_number ASC"
+  ).all(id) as any[];
+  return c.json(versions);
+});
+
+// Get the prompt version used for a conversation
+app.get("/api/conversations/:id/prompt", (c) => {
+  const id = Number(c.req.param("id"));
+  const conv = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Record<string, any> | undefined;
+  if (!conv) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  if (!conv.prompt_version_id) {
+    return c.json({ error: "No prompt version linked to this conversation" }, 404);
+  }
+  const version = db.prepare("SELECT * FROM prompt_versions WHERE id = ?").get(conv.prompt_version_id) as Record<string, any> | undefined;
+  if (!version) {
+    return c.json({ error: "Prompt version not found" }, 404);
+  }
+  const prompt = db.prepare("SELECT * FROM prompts WHERE id = ?").get(version.prompt_id) as Record<string, any> | undefined;
+  return c.json({ ...(prompt ?? {}), version });
+});
 
 // Health check endpoint
 // Health check endpoint

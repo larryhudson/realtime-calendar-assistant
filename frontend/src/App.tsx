@@ -5,12 +5,9 @@ import {
   Flex,
   Heading,
   Provider,
-  TextField,
   View,
   defaultTheme,
 } from "@adobe/react-spectrum";
-
-const INITIAL_COUNT = 0;
 
 import EventList from "./EventList";
 import { useEventForm } from "./hooks/useEventForm";
@@ -19,8 +16,6 @@ import { useOpenAISession } from "./hooks/useOpenAISession";
 import { useEvents } from "./hooks/useEvents";
 
 const App: React.FC = () => {
-  const [count, setCount] = useState<number>(INITIAL_COUNT);
-  const [name, setName] = useState<string>("");
   // Event form and dialog state/logic
   const {
     eventForm,
@@ -127,16 +122,6 @@ const App: React.FC = () => {
           maxWidth="size-3600"
         >
           <Heading level={1}>React Spectrum Demo</Heading>
-          <TextField
-            label="Your Name"
-            value={name}
-            onChange={setName}
-            contextualHelp="Enter your name"
-          />
-          <Button variant="cta" onPress={() => setCount(count + 1)}>
-            Count is {count}
-          </Button>
-          {name !== "" && <Heading level={3}>Hello, {name}!</Heading>}
 
           {conversationButton}
           <audio

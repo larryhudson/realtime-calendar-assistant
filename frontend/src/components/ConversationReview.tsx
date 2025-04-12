@@ -1,5 +1,6 @@
 import React from "react";
-import { Heading, View, ListView, Item, Text, Divider, Content } from "@adobe/react-spectrum";
+import { Heading, View, ListView, Item, Text, Divider, Content, ProgressCircle } from "@adobe/react-spectrum";
+import { useConversations } from "../hooks/useConversations";
 
 /**
  * ConversationReview
@@ -8,10 +9,7 @@ import { Heading, View, ListView, Item, Text, Divider, Content } from "@adobe/re
  * This is the entry point for the evaluation tools frontend.
  */
 export default function ConversationReview() {
-  // TODO: Fetch conversations from backend and display them
-  // TODO: Allow selection of a conversation to review details
-  // TODO: Display audio recordings, transcriptions, and notes/comments
-  // TODO: Provide UI to add/view notes/comments
+  const { conversations, loading, error } = useConversations();
 
   return (
     <View padding="size-200">
@@ -21,11 +19,31 @@ export default function ConversationReview() {
         <Text>
           Select a conversation to review audio recordings, transcriptions, and add notes/comments for evaluation.
         </Text>
-        {/* Placeholder for conversation list */}
-        <ListView aria-label="Conversations" selectionMode="single">
-          {/* TODO: Map conversations here */}
-          <Item key="placeholder">No conversations loaded yet.</Item>
-        </ListView>
+        {loading ? (
+          <ProgressCircle aria-label="Loading conversations…" isIndeterminate />
+        ) : error ? (
+          <div style={{ color: "red" }}>
+            <Text>Error: {error}</Text>
+          </div>
+        ) : (
+          <ListView aria-label="Conversations" selectionMode="single">
+            {conversations.length === 0 ? (
+              <Item key="placeholder">No conversations found.</Item>
+            ) : (
+              conversations.map((conv) => (
+                <Item key={conv.id}>
+                  <Text>
+                    {conv.title ? conv.title : `Conversation ${conv.id}`}
+                    {" — "}
+                    <span style={{ color: "#888" }}>
+                      {new Date(conv.created_at).toLocaleString()}
+                    </span>
+                  </Text>
+                </Item>
+              ))
+            )}
+          </ListView>
+        )}
       </Content>
     </View>
   );

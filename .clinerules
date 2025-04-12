@@ -2,6 +2,8 @@
 
 Cline has access to GitHub tools to help automate and enforce these collaboration rules.
 
+When starting a new task, make sure you are on the main branch and have the latest changes from origin.
+
 ## Commit Workflow
 
 - **Before committing any changes, test them with the user to ensure they are working and do not introduce new errors. Only commit after user confirmation.**

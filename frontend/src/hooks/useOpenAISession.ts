@@ -8,8 +8,9 @@ type OpenAISessionResponse = {
   [key: string]: unknown;
 };
 
-async function fetchOpenAISession(): Promise<OpenAISessionResponse> {
-  const res = await fetch("/api/openai/session");
+async function fetchOpenAISession(model: string): Promise<OpenAISessionResponse> {
+  const url = `/api/openai/session?model=${encodeURIComponent(model)}`;
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error("Failed to fetch OpenAI session: " + res.statusText);
   }
@@ -17,7 +18,8 @@ async function fetchOpenAISession(): Promise<OpenAISessionResponse> {
 }
 
 export function useOpenAISession(
-  onFunctionCall?: (args: any) => void
+  onFunctionCall?: (args: any) => void,
+  model: string = "gpt-4o-realtime-preview-2024-12-17"
 ) {
   const [isConversing, setIsConversing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
@@ -33,7 +35,7 @@ export function useOpenAISession(
     setPeerConnection(null);
     setLocalStream(null);
     try {
-      const data = await fetchOpenAISession();
+      const data = await fetchOpenAISession(model);
       let token: string | undefined = undefined;
       if (
         data &&
@@ -126,8 +128,7 @@ export function useOpenAISession(
       await pc.setLocalDescription(offer);
 
       const baseUrl = "https://api.openai.com/v1/realtime";
-      const model = "gpt-4o-realtime-preview-2024-12-17";
-      const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+      const sdpResponse = await fetch(`${baseUrl}?model=${encodeURIComponent(model)}`, {
         method: "POST",
         body: offer.sdp,
         headers: {

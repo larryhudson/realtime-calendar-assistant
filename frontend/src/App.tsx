@@ -14,8 +14,12 @@ import { useEventForm } from "./hooks/useEventForm";
 import EventFormDialog from "./components/EventFormDialog";
 import { useOpenAISession } from "./hooks/useOpenAISession";
 import { useEvents } from "./hooks/useEvents";
+import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
 
 const App: React.FC = () => {
+  // Model selector state
+  const [selectedModel, setSelectedModel] = useState<OpenAIModel>("gpt-4o-realtime-preview-2024-12-17");
+
   // Event form and dialog state/logic
   const {
     eventForm,
@@ -34,17 +38,20 @@ const App: React.FC = () => {
     audioRef,
     handleStartConversation,
     handleStopConversation,
-  } = useOpenAISession((args) => {
-    // Prefill event form when function_call is received
-    openEventDialog({
-      title: args.title || "",
-      description: args.description || "",
-      startDate: args.start_time ? args.start_time.slice(0, 10) : "",
-      startTime: args.start_time ? args.start_time.slice(11, 16) : "",
-      endDate: args.end_time ? args.end_time.slice(0, 10) : "",
-      endTime: args.end_time ? args.end_time.slice(11, 16) : "",
-    });
-  });
+  } = useOpenAISession(
+    (args) => {
+      // Prefill event form when function_call is received
+      openEventDialog({
+        title: args.title || "",
+        description: args.description || "",
+        startDate: args.start_time ? args.start_time.slice(0, 10) : "",
+        startTime: args.start_time ? args.start_time.slice(11, 16) : "",
+        endDate: args.end_time ? args.end_time.slice(0, 10) : "",
+        endTime: args.end_time ? args.end_time.slice(11, 16) : "",
+      });
+    },
+    selectedModel
+  );
 
   // Events state and logic
   const { events, eventsLoading, eventsError, refreshEvents } = useEvents();
@@ -122,6 +129,12 @@ const App: React.FC = () => {
           maxWidth="size-3600"
         >
           <Heading level={1}>React Spectrum Demo</Heading>
+
+          <ModelSelector
+            value={selectedModel}
+            onChange={setSelectedModel}
+            disabled={isConversing}
+          />
 
           {conversationButton}
           <audio

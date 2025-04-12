@@ -12,28 +12,97 @@ import { useConversationAudio } from "../hooks/useConversationAudio";
 import { useConversationTranscriptions } from "../hooks/useConversationTranscriptions";
 import { useConversationNotes } from "../hooks/useConversationNotes";
 
+import { useAddConversationNote } from "../hooks/useAddConversationNote";
+import { TextField, TextArea, Button, Flex } from "@adobe/react-spectrum";
+
 function NotesPanel({ conversationId }: { conversationId: number }) {
-  const { notes, loading, error } = useConversationNotes(conversationId);
+  const { addNote, loading: adding, error: addError, success } = useAddConversationNote(conversationId);
+
+  const [content, setContent] = useState("");
+  const [timestamp, setTimestamp] = useState("");
+  const [author, setAuthor] = useState("");
+
+  // Refresh notes after successful add
+  React.useEffect(() => {
+    if (success) {
+      setContent("");
+      setTimestamp("");
+      setAuthor("");
+    }
+  }, [success]);
+
+  // Re-fetch notes after successful add
+  const { notes: refreshedNotes, loading: refreshedLoading, error: refreshedError } = useConversationNotes(conversationId);
 
   return (
     <View>
       <Heading level={4}>Notes & Comments</Heading>
-      {loading ? (
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!content.trim() || !timestamp.trim()) return;
+          await addNote({
+            content,
+            timestamp,
+            author: author.trim() ? author : undefined,
+          });
+        }}
+        style={{ marginBottom: 16 }}
+      >
+        <Flex direction="column" gap="size-100">
+          <TextArea
+            label="Comment"
+            value={content}
+            onChange={setContent}
+            isRequired
+            width="100%"
+            minWidth={300}
+            maxWidth={600}
+          />
+          <TextField
+            label="Timestamp (seconds into audio)"
+            value={timestamp}
+            onChange={setTimestamp}
+            isRequired
+            width="size-2000"
+            minWidth={200}
+            maxWidth={400}
+            placeholder="e.g. 12.5"
+          />
+          <TextField
+            label="Author"
+            value={author}
+            onChange={setAuthor}
+            width="size-2000"
+            minWidth={200}
+            maxWidth={400}
+            placeholder="Optional"
+          />
+          <Button type="submit" variant="primary" isDisabled={adding || !content.trim() || !timestamp.trim()}>
+            {adding ? "Adding..." : "Add Comment"}
+          </Button>
+          {addError && <Text UNSAFE_style={{ color: "red" }}>Error: {addError}</Text>}
+          {success && <Text UNSAFE_style={{ color: "green" }}>Comment added!</Text>}
+        </Flex>
+      </form>
+      {refreshedLoading ? (
         <ProgressCircle aria-label="Loading notes…" isIndeterminate size="S" />
-      ) : error ? (
+      ) : refreshedError ? (
         <div style={{ color: "red" }}>
-          <Text>Error: {error}</Text>
+          <Text>Error: {refreshedError}</Text>
         </div>
-      ) : notes.length === 0 ? (
+      ) : refreshedNotes.length === 0 ? (
         <Text>No notes or comments for this conversation.</Text>
       ) : (
         <View>
-          {notes.map((note) => (
+          {refreshedNotes.map((note) => (
             <View key={note.id} marginBottom="size-150">
               <Text>
                 <strong>{note.author ? note.author : "Anonymous"}</strong> —{" "}
                 <span style={{ color: "#888" }}>
-                  {new Date(note.timestamp).toLocaleString()}
+                  {isFinite(Number(note.timestamp))
+                    ? `${Number(note.timestamp)}s`
+                    : note.timestamp}
                 </span>
               </Text>
               <View backgroundColor="static-white" padding="size-100" borderRadius="small" marginTop="size-50">
@@ -101,7 +170,7 @@ function AudioRecordings({ conversationId }: { conversationId: number }) {
           {audio.map((rec) => (
             <View key={rec.id} marginBottom="size-150">
               <Text>
-                <strong>{rec.filename}</strong> —{" "}
+                <strong>{rec.file_path}</strong> —{" "}
                 <span style={{ color: "#888" }}>
                   {new Date(rec.created_at).toLocaleString()}
                 </span>

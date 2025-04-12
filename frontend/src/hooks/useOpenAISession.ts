@@ -17,9 +17,17 @@ async function fetchOpenAISession(model: string): Promise<OpenAISessionResponse>
   return await res.json();
 }
 
+type CalendarEventFunctionArgs = {
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time: string;
+};
+
 export function useOpenAISession(
-  onFunctionCall?: (args: any) => void,
-  model: string = "gpt-4o-realtime-preview-2024-12-17"
+  onFunctionCall?: (args: CalendarEventFunctionArgs) => void,
+  model: string = "gpt-4o-realtime-preview-2024-12-17",
+  instructions: string = ""
 ) {
   const [isConversing, setIsConversing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
@@ -111,15 +119,25 @@ export function useOpenAISession(
         }
       });
 
-      // After connection, send session.update to register the function
+      // After connection, send session.update to register the function and instructions
       dc.addEventListener("open", () => {
-        const sessionUpdate = {
+        const sessionUpdate: {
+          type: "session.update";
+          session: {
+            tools: typeof calendarEventFunction[];
+            tool_choice: string;
+            instructions?: string;
+          };
+        } = {
           type: "session.update",
           session: {
             tools: [calendarEventFunction],
             tool_choice: "auto"
           }
         };
+        if (instructions && instructions.trim().length > 0) {
+          sessionUpdate.session.instructions = instructions;
+        }
         dc.send(JSON.stringify(sessionUpdate));
       });
 

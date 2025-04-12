@@ -32,18 +32,32 @@ export type OpenAIToolSchema = {
   };
 };
 
-export function useOpenAISession(
-  onFunctionCall: OpenAIToolFunctionCallHandler,
-  tools: OpenAIToolSchema[],
-  model: string = "gpt-4o-realtime-preview-2024-12-17",
-  instructions: string = ""
-) {
+interface UseOpenAISessionOptions {
+  onFunctionCall: OpenAIToolFunctionCallHandler;
+  tools: OpenAIToolSchema[];
+  model?: string;
+  instructions?: string;
+  onAudioReady?: (audio: Blob, filename: string) => void;
+}
+
+export function useOpenAISession({
+  onFunctionCall,
+  tools,
+  model = "gpt-4o-realtime-preview-2024-12-17",
+  instructions = "",
+  onAudioReady,
+}: UseOpenAISessionOptions) {
   const [isConversing, setIsConversing] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  // const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  // const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const destNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
   // Start conversation and establish WebRTC connection
   const handleStartConversation = async () => {
@@ -71,7 +85,7 @@ export function useOpenAISession(
       // 1. Create peer connection
       const pc = new RTCPeerConnection();
 
-      // 2. Set up to play remote audio from the model
+      // 2. Set up to play remote audio from the model and capture remote stream
       pc.ontrack = (e) => {
         if (audioRef.current) {
           audioRef.current.srcObject = e.streams[0];
@@ -154,6 +168,54 @@ export function useOpenAISession(
       await pc.setRemoteDescription(answer);
 
       setPeerConnection(pc);
+
+      // --- AUDIO RECORDING SETUP ---
+      // Wait for both localStream and remoteStream to be available
+      // We'll use a small delay to ensure ontrack fires
+      setTimeout(() => {
+        const local = ms;
+        const remote = audioRef.current?.srcObject as MediaStream | null;
+        if (!local || !remote) return;
+
+        // Create AudioContext and destination node
+        const audioCtx =
+          new (window.AudioContext ||
+            (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
+        audioContextRef.current = audioCtx;
+        const dest = audioCtx.createMediaStreamDestination();
+        destNodeRef.current = dest;
+
+        // Connect local mic
+        const localSource = audioCtx.createMediaStreamSource(local);
+        localSource.connect(dest);
+
+        // Connect remote model audio
+        const remoteSource = audioCtx.createMediaStreamSource(remote);
+        remoteSource.connect(dest);
+
+        // Start MediaRecorder on the destination node's stream
+        const recorder = new MediaRecorder(dest.stream);
+        setMediaRecorder(recorder);
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+        recorder.onstop = async () => {
+          console.log("[useOpenAISession] MediaRecorder onstop triggered, chunks:", chunks);
+          // setAudioChunks(chunks);
+          // Upload audio blob to backend
+          if (chunks.length > 0 && onAudioReady) {
+            const blob = new Blob(chunks, { type: "audio/webm" });
+            console.log("[useOpenAISession] Calling onAudioReady with blob:", blob);
+            onAudioReady(blob, "conversation.webm");
+          } else {
+            console.log("[useOpenAISession] No audio chunks or onAudioReady missing.");
+          }
+        };
+        console.log("[useOpenAISession] Starting MediaRecorder...");
+        recorder.start();
+      }, 500);
+
     } catch (error: unknown) {
       if (error instanceof Error) {
         setError(error.message);
@@ -178,6 +240,17 @@ export function useOpenAISession(
     if (audioRef.current) {
       audioRef.current.srcObject = null;
     }
+    if (mediaRecorder) {
+      console.log("[useOpenAISession] Stopping MediaRecorder...");
+      mediaRecorder.stop();
+      setMediaRecorder(null);
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    destNodeRef.current = null;
+    // setRemoteStream(null);
   };
 
   return {

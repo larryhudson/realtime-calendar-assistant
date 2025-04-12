@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { serve } from "@hono/node-server";
 import Database from "better-sqlite3";
 import path from "path";
@@ -115,8 +116,16 @@ const conversationUpdateSchema = z.object({
   title: z.string().min(1).max(200),
 });
 
-// Hono app setup
+ // Hono app setup
 const app = new Hono();
+
+// Serve static files from /uploads at /uploads/*
+app.use(
+  "/uploads/*",
+  serveStatic({
+    root: "./",
+  })
+);
 
 // Health check endpoint
 // Health check endpoint
@@ -270,7 +279,12 @@ app.get("/api/conversations/:conversationId/audio", (c) => {
     file_path: string;
     created_at: string;
   }[];
-  return c.json(recordings);
+  // Add url property to each recording
+  const withUrls = recordings.map((rec) => ({
+    ...rec,
+    url: `/uploads/${rec.file_path}`,
+  }));
+  return c.json(withUrls);
 });
 
 // GET /api/conversations/:conversationId/transcriptions - list transcriptions for a conversation

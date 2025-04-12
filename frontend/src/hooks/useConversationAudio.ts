@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 
 export interface ConversationAudio {
   id: number;
-  filename: string;
+  conversation_id: number;
+  file_path: string;
   url: string;
   created_at: string;
-  // Add other fields as needed
 }
 
 export function useConversationAudio(conversationId: number | null) {
@@ -26,7 +26,13 @@ export function useConversationAudio(conversationId: number | null) {
       .then(async (res) => {
         if (!res.ok) throw new Error("Failed to fetch audio recordings");
         const data = await res.json();
-        setAudio(data);
+        // Map backend response to include url property
+        setAudio(
+          data.map((rec: any) => ({
+            ...rec,
+            url: `/uploads/${rec.file_path}`,
+          }))
+        );
       })
       .catch((err) => {
         setError(err.message || "Unknown error");

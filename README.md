@@ -62,14 +62,22 @@ npm install
 
 The backend is written in TypeScript and uses [Hono](https://hono.dev/) with SQLite for storage.
 
-> **Note:** There is currently no build or start script. Run the backend using `ts-node`:
+> **Development Mode:**  
+> You can now run the backend in development mode with automatic restarts on file changes:
 
 ```bash
-npx ts-node index.ts
+npm run dev
 ```
 
 - The backend server will start on [http://localhost:3001](http://localhost:3001) by default.
 - A SQLite database file (`data.sqlite`) will be created in the backend directory.
+
+> **Legacy/One-off Runs:**  
+> You can still run the backend directly with ts-node if needed:
+
+```bash
+npx ts-node index.ts
+```
 
 #### Start the Frontend
 
@@ -120,7 +128,8 @@ Returns a JSON object with the ephemeral session token and related metadata.
 - The frontend is currently a demo UI and does **not** yet connect to the backend API.
 - Linting: `npm run lint` (frontend)
 - Testing: `npm run test` (frontend, uses Vitest)
-- Backend is TypeScript, but currently run directly with `ts-node`.
+- Backend is TypeScript. For development, use `npm run dev` (automatic restart on changes via [tsx](https://github.com/esbuild/tsx)).  
+  You can also run directly with `npx ts-node index.ts` for one-off runs.
 
 ---
 

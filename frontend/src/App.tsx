@@ -17,6 +17,7 @@ import { calendarEventTool, isCalendarEventFunctionArgs, getEventFormFromFunctio
 import { useEvents } from "./hooks/useEvents";
 import { ModelSelector, OpenAIModel } from "./components/ModelSelector";
 import { InstructionsEditor } from "./components/InstructionsEditor";
+import ConversationReview from "./components/ConversationReview";
 
 const DEFAULT_INSTRUCTIONS =
   "You are a helpful, witty, and friendly AI assistant. Act like a human but remember that you aren't a human and that you can't do human things in the real world. Your voice and personality should be warm and engaging with a lively and playful tone.";
@@ -181,6 +182,7 @@ const App: React.FC = () => {
           />
         </Flex>
         <EventList events={events} loading={eventsLoading} error={eventsError} />
+        <ConversationReview />
       </View>
     </Provider>
   );

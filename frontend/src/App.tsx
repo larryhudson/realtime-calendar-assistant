@@ -16,14 +16,7 @@ import EventList from "./EventList";
 import { useEventForm } from "./hooks/useEventForm";
 import EventFormDialog from "./components/EventFormDialog";
 import { useOpenAISession } from "./hooks/useOpenAISession";
-
-type Event = {
-  id: number;
-  title: string;
-  description: string;
-  start_time: string;
-  end_time: string;
-};
+import { useEvents } from "./hooks/useEvents";
 
 const App: React.FC = () => {
   const [count, setCount] = useState<number>(INITIAL_COUNT);
@@ -58,38 +51,11 @@ const App: React.FC = () => {
     });
   });
 
-  // State for events list
-  const [events, setEvents] = useState<Event[]>([]);
-  const [eventsLoading, setEventsLoading] = useState<boolean>(true);
-  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+  // Events state and logic
+  const { events, eventsLoading, eventsError, refreshEvents } = useEvents();
 
   // Local state for event form validation errors
   const [formError, setFormError] = useState<string | undefined>(undefined);
-
-  // Fetch events from backend
-  const fetchEvents = async () => {
-    setEventsLoading(true);
-    setEventsError(undefined);
-    try {
-      const res = await fetch("/api/events");
-      if (!res.ok) {
-        throw new Error("Failed to fetch events: " + res.statusText);
-      }
-      const data = await res.json();
-      setEvents(data);
-    } catch (err) {
-      setEventsError(
-        err instanceof Error ? err.message : "Unknown error fetching events"
-      );
-    } finally {
-      setEventsLoading(false);
-    }
-  };
-
-  // Fetch events on mount
-  React.useEffect(() => {
-    fetchEvents();
-  }, []);
 
   let conversationButton;
   if (isConversing) {
@@ -143,7 +109,7 @@ const App: React.FC = () => {
       closeEventDialog();
       resetEventForm();
       // Refresh events list after saving
-      fetchEvents();
+      refreshEvents();
     } catch (err) {
       setFormError(
         err instanceof Error ? err.message : "Unknown error creating event"

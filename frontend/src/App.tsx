@@ -118,8 +118,7 @@ const App: React.FC = () => {
         const data = await res.json();
         setConversationId(data.id);
         logDebug(`Conversation created with id ${data.id}.`);
-        handleStartConversation();
-        logDebug("Conversation started.");
+        // handleStartConversation will be triggered by useEffect below
       } else {
         setConversationId(null);
         logDebug("Failed to create conversation.");
@@ -129,6 +128,15 @@ const App: React.FC = () => {
       logDebug("Error creating conversation.");
     }
   };
+
+  // Start OpenAI session only after conversationId is set
+  React.useEffect(() => {
+    if (conversationId && !isConversing) {
+      handleStartConversation();
+      logDebug("Conversation started.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   let conversationButton;
   if (isConversing) {

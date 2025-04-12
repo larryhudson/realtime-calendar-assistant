@@ -14,6 +14,15 @@ interface Event {
   end_time: string;
 }
 
+/**
+ * Conversation type definition
+ */
+interface Conversation {
+  id: number;
+  title: string;
+  created_at: string;
+}
+
 // Database setup
 const dbPath = path.join(__dirname, "data.sqlite");
 const db = new Database(dbPath);
@@ -79,6 +88,7 @@ const eventSchema = z.object({
   ),
 });
 
+// Event update schema
 const eventUpdateSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
@@ -92,11 +102,106 @@ const eventUpdateSchema = z.object({
   ),
 });
 
+/**
+ * Zod schemas for conversation validation
+ */
+const conversationSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
+const conversationUpdateSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
 // Hono app setup
 const app = new Hono();
 
 // Health check endpoint
+// Health check endpoint
 app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+/**
+ * Conversation endpoints
+ */
+
+// Get all conversations
+app.get("/api/conversations", (c) => {
+  const conversations = db.prepare("SELECT * FROM conversations ORDER BY created_at DESC").all() as Conversation[];
+  return c.json(conversations);
+});
+
+// Create a new conversation
+app.post("/api/conversations", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = conversationSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title } = parseResult.data;
+  const stmt = db.prepare(
+    "INSERT INTO conversations (title) VALUES (?)"
+  );
+  const info = stmt.run(title);
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(info.lastInsertRowid) as Conversation;
+  return c.json(conversation, 201);
+});
+
+// Get a single conversation by ID
+app.get("/api/conversations/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Conversation | undefined;
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  return c.json(conversation);
+});
+
+// Update a conversation
+app.put("/api/conversations/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const parseResult = conversationUpdateSchema.safeParse(body);
+  if (!parseResult.success) {
+    return c.json(
+      { error: "Validation failed", details: parseResult.error.flatten() },
+      400
+    );
+  }
+  const { title } = parseResult.data;
+  const stmt = db.prepare(
+    "UPDATE conversations SET title = ? WHERE id = ?"
+  );
+  const info = stmt.run(title, id);
+  if (info.changes === 0) {
+    return c.json({ error: "Conversation not found or no changes made" }, 404);
+  }
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as Conversation;
+  return c.json(conversation);
+});
+
+// Delete a conversation
+app.delete("/api/conversations/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  const stmt = db.prepare("DELETE FROM conversations WHERE id = ?");
+  const info = stmt.run(id);
+  if (info.changes === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+  return c.json({ success: true });
+});
 
 // Get all events
 app.get("/api/events", (c) => {

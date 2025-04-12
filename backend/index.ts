@@ -4,6 +4,8 @@ import Database from "better-sqlite3";
 import path from "path";
 import axios from "axios";
 import { z } from "zod";
+import fs from "fs";
+import crypto from "crypto";
 
 // Event type definition
 interface Event {
@@ -201,6 +203,55 @@ app.delete("/api/conversations/:id", (c) => {
     return c.json({ error: "Conversation not found" }, 404);
   }
   return c.json({ success: true });
+});
+
+
+/**
+ * Audio recording endpoints
+ */
+
+// POST /api/conversations/:conversationId/audio - upload audio file
+app.post("/api/conversations/:conversationId/audio", async (c) => {
+  const conversationId = Number(c.req.param("conversationId"));
+  // Check if conversation exists
+  const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
+  if (!conversation) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  const body = await c.req.parseBody();
+  const file = body["file"];
+  if (!file || typeof file === "string") {
+    return c.json({ error: "No file uploaded" }, 400);
+  }
+
+  // Generate unique filename
+  const ext = file.name ? file.name.split(".").pop() : "wav";
+  const filename = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+  const uploadPath = path.join(__dirname, "uploads", filename);
+
+  // Save file to disk
+  const arrayBuffer = await file.arrayBuffer();
+  fs.writeFileSync(uploadPath, Buffer.from(arrayBuffer));
+
+  // Insert into audio_recordings table
+  const stmt = db.prepare(
+    "INSERT INTO audio_recordings (conversation_id, file_path) VALUES (?, ?)"
+  );
+  const info = stmt.run(conversationId, filename);
+  const audioRecording = db.prepare("SELECT * FROM audio_recordings WHERE id = ?").get(info.lastInsertRowid) as {
+    id: number;
+    conversation_id: number;
+    file_path: string;
+    created_at: string;
+  };
+
+  return c.json({
+    id: audioRecording.id,
+    conversation_id: audioRecording.conversation_id,
+    file_path: audioRecording.file_path,
+    created_at: audioRecording.created_at,
+  }, 201);
 });
 
 // Get all events

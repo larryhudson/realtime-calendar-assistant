@@ -8,6 +8,41 @@ import { useConversations } from "../hooks/useConversations";
  * UI for reviewing conversations, audio recordings, transcriptions, and notes/comments.
  * This is the entry point for the evaluation tools frontend.
  */
+import { useConversationAudio } from "../hooks/useConversationAudio";
+
+function AudioRecordings({ conversationId }: { conversationId: number }) {
+  const { audio, loading, error } = useConversationAudio(conversationId);
+
+  return (
+    <View>
+      <Heading level={4}>Audio Recordings</Heading>
+      {loading ? (
+        <ProgressCircle aria-label="Loading audio recordings…" isIndeterminate size="S" />
+      ) : error ? (
+        <div style={{ color: "red" }}>
+          <Text>Error: {error}</Text>
+        </div>
+      ) : audio.length === 0 ? (
+        <Text>No audio recordings found for this conversation.</Text>
+      ) : (
+        <View>
+          {audio.map((rec) => (
+            <View key={rec.id} marginBottom="size-150">
+              <Text>
+                <strong>{rec.filename}</strong> —{" "}
+                <span style={{ color: "#888" }}>
+                  {new Date(rec.created_at).toLocaleString()}
+                </span>
+              </Text>
+              <audio controls src={rec.url} style={{ display: "block", marginTop: 4, width: "100%" }} />
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function ConversationReview() {
   const { conversations, loading, error } = useConversations();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -68,7 +103,10 @@ export default function ConversationReview() {
               <strong>Created:</strong>{" "}
               {new Date(selectedConversation.created_at).toLocaleString()}
             </Text>
-            {/* TODO: Display audio recordings, transcriptions, and notes/comments */}
+            <Divider marginY="size-200" />
+            {/* Audio Recordings */}
+            <AudioRecordings conversationId={selectedConversation.id} />
+            {/* TODO: Display transcriptions and notes/comments */}
             <Divider marginY="size-200" />
             <Text>
               Conversation details and evaluation tools will appear here.

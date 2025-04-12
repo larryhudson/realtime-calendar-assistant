@@ -35,3 +35,5 @@ backend/*.db
 .idea/
 .vscode/
 coverage/
+
+backend/uploads

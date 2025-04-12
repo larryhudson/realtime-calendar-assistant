@@ -149,16 +149,38 @@ app.delete("/api/events/:id", (c) => {
  * Requires process.env.OPENAI_API_KEY to be set.
  */
 app.get("/api/openai/session", async (c) => {
-  // TODO (#9): Make the 'model' choice a URL parameter (e.g. /api/openai/session?model=...)
+  // Accept model as a URL parameter, validate, and use in OpenAI API request
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_API_KEY) {
     return c.json({ error: "OpenAI API key not configured" }, 500);
   }
+
+  // Allowed models
+  const allowedModels = [
+    "gpt-4o-realtime-preview-2024-12-17",
+    "gpt-4o-mini-realtime-preview-2024-12-17"
+  ];
+
+  const modelParam = c.req.query("model");
+  let model: string;
+
+  if (modelParam) {
+    if (!allowedModels.includes(modelParam)) {
+      return c.json({
+        error: "Invalid model parameter",
+        allowedModels
+      }, 400);
+    }
+    model = modelParam;
+  } else {
+    model = "gpt-4o-realtime-preview-2024-12-17";
+  }
+
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/realtime/sessions",
       {
-        model: "gpt-4o-realtime-preview-2024-12-17",
+        model,
         voice: "verse"
       },
       {
